@@ -111,7 +111,7 @@ class DoubleUNet(nn.Module):
 
         # apply pretrained vgg19 weights on 1st unet
         vgg19 = models.vgg19_bn()
-        vgg19.load_state_dict(torch.load('../input/pytorch-pretrained-models/vgg19_bn-c79401a0.pth'))
+        vgg19.load_state_dict(torch.load(PATH_VGG19))
 
         self.enc1_1.conv1.weights = vgg19.features[0].weight
         self.enc1_1.bn1.weights = vgg19.features[1].weight
