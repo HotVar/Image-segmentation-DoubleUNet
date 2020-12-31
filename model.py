@@ -158,7 +158,7 @@ class DoubleUNet(nn.Module):
         self.dec2_2 = VGGBlock(384, 64, 64, False)
         self.dec2_1 = VGGBlock(192, 32, 32, False)
 
-        self.output2 = nn.Conv2d(in_channels=32, out_channels=1, kernel_size=(1, 1))
+        self.output2 = output_block()
 
     def forward(self, _input):
         # encoder of 1st unet
