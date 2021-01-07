@@ -11,23 +11,23 @@ class AverageMeter(object):
         self.avg = 0
         self.sum = 0
         self.count = 0
-        self._list = []
+        self.avg_list = []
 
     def update(self, val, n=1):
         self.val = val
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
-        self._list.append(self.avg)
+        self.avg_list.append(self.avg)
 
     def __str__(self):
-        fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
+        fmtstr = '{name} {avg' + self.fmt + '}'
         return fmtstr.format(**self.__dict__)
 
 
 class DiceBCELoss(nn.Module):
     def __init__(self, weight=None, size_average=True):
-        super(DiceBCELoss, self).__init__()
+        super().__init__()
 
     def forward(self, inputs, targets, smooth=1):
         # comment out if your model contains a sigmoid or equivalent activation layer
@@ -43,6 +43,25 @@ class DiceBCELoss(nn.Module):
         Dice_BCE = BCE + dice_loss
 
         return Dice_BCE
+
+
+class FocalTverskyLoss(nn.Module):
+    def __init__(self, beta=0.7, gamma=0.75):
+        super().__init__()
+        self.beta = beta
+        self.gamma = gamma
+
+    def forward(self, pred, mask, smooth=1.):
+        pred = pred.view(-1)
+        mask = mask.view(-1)
+
+        true_pos = (pred * mask).sum()
+        false_neg = ((1 - pred) * mask).sum()
+        false_pos = (pred * (1 - mask)).sum()
+        tversky = (true_pos + smooth) / (true_pos + self.beta * false_neg + (1 - self.beta) * false_pos + smooth)
+        focal_tversky_loss = torch.pow((1 - tversky), self.gamma)
+
+        return focal_tversky_loss
 
 
 class DiceCoef(nn.Module):
