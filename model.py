@@ -120,3 +120,135 @@ def output_block():
     Layer = nn.Sequential(nn.Conv2d(in_channels=32, out_channels=1, kernel_size=(1, 1)),
                           nn.Sigmoid())
     return Layer
+
+
+
+class DoubleUNet(nn.Module):
+    def __init__(self, PATH_VGG19):
+        super().__init__()
+        self.enc1_1 = VGGBlock(3, 64, 64, True)
+        self.enc1_2 = VGGBlock(64, 128, 128, True)
+        self.enc1_3 = VGGBlock(128, 256, 256, True)
+        self.enc1_4 = VGGBlock(256, 512, 512, True)
+        self.enc1_5 = VGGBlock(512, 512, 512, True)
+        self.enc1_6 = VGGBlock(512, 512, 512, True)
+
+        # apply pretrained vgg19 weights on 1st unet
+        vgg19 = models.vgg19_bn()
+        vgg19.load_state_dict(torch.load(PATH_VGG19))
+
+        self.enc1_1.conv1.weights = vgg19.features[0].weight
+        self.enc1_1.bn1.weights = vgg19.features[1].weight
+        self.enc1_1.conv2.weights = vgg19.features[3].weight
+        self.enc1_1.bn2.weights = vgg19.features[4].weight
+        self.enc1_2.conv1.weights = vgg19.features[7].weight
+        self.enc1_2.bn1.weights = vgg19.features[8].weight
+        self.enc1_2.conv2.weights = vgg19.features[10].weight
+        self.enc1_2.bn2.weights = vgg19.features[11].weight
+        self.enc1_3.conv1.weights = vgg19.features[14].weight
+        self.enc1_3.bn1.weights = vgg19.features[15].weight
+        self.enc1_3.conv2.weights = vgg19.features[17].weight
+        self.enc1_3.bn2.weights = vgg19.features[18].weight
+        self.enc1_4.conv1.weights = vgg19.features[27].weight
+        self.enc1_4.bn1.weights = vgg19.features[28].weight
+        self.enc1_4.conv2.weights = vgg19.features[30].weight
+        self.enc1_4.bn2.weights = vgg19.features[31].weight
+        self.enc1_5.conv1.weights = vgg19.features[33].weight
+        self.enc1_5.bn1.weights = vgg19.features[34].weight
+        self.enc1_5.conv2.weights = vgg19.features[36].weight
+        self.enc1_5.bn2.weights = vgg19.features[37].weight
+        self.enc1_6.conv1.weights = vgg19.features[40].weight
+        self.enc1_6.bn1.weights = vgg19.features[41].weight
+        self.enc1_6.conv2.weights = vgg19.features[43].weight
+        self.enc1_6.bn2.weights = vgg19.features[44].weight
+        del vgg19
+
+        self.aspp1 = ASPP(512, 512)
+
+        self.up = nn.Upsample(scale_factor=2, mode='bilinear')
+        self.dec1_6 = VGGBlock(1024, 512, 512, False)
+        self.dec1_5 = VGGBlock(1024, 512, 512, False)
+        self.dec1_4 = VGGBlock(1024, 256, 256, False)
+        self.dec1_3 = VGGBlock(512, 128, 128, False)
+        self.dec1_2 = VGGBlock(256, 64, 64, False)
+        self.dec1_1 = VGGBlock(128, 32, 32, False)
+
+        self.output1 = output_block()
+
+        self.enc2_1 = VGGBlock(3, 64, 64, True, True)
+        self.enc2_2 = VGGBlock(64, 128, 128, True, True)
+        self.enc2_3 = VGGBlock(128, 256, 256, True, True)
+        self.enc2_4 = VGGBlock(256, 512, 512, True, True)
+        self.enc2_5 = VGGBlock(512, 512, 512, True, True)
+        self.enc2_6 = VGGBlock(512, 512, 512, True, True)
+
+        self.aspp2 = ASPP(512, 512)
+
+        self.dec2_6 = VGGBlock(1536, 512, 512, False, True)
+        self.dec2_5 = VGGBlock(1536, 512, 512, False, True)
+        self.dec2_4 = VGGBlock(1536, 256, 256, False, True)
+        self.dec2_3 = VGGBlock(768, 128, 128, False, True)
+        self.dec2_2 = VGGBlock(384, 64, 64, False, True)
+        self.dec2_1 = VGGBlock(192, 32, 32, False, True)
+
+        self.output2 = output_block()
+
+    def forward(self, _input):
+        # encoder of 1st unet
+        y_enc1_1 = self.enc1_1(_input)
+        y_enc1_2 = self.enc1_2(y_enc1_1)
+        y_enc1_3 = self.enc1_3(y_enc1_2)
+        y_enc1_4 = self.enc1_4(y_enc1_3)
+        y_enc1_5 = self.enc1_5(y_enc1_4)
+        y_enc1_6 = self.enc1_6(y_enc1_5)
+
+        # aspp bridge1
+        y_aspp1 = self.aspp1(y_enc1_6)
+
+        # decoder of 1st unet
+        y_dec1_5 = self.up(y_aspp1)
+        y_dec1_5 = self.dec1_5(torch.cat([y_enc1_5, y_dec1_5], 1))
+        y_dec1_4 = self.up(y_dec1_5)
+        y_dec1_4 = self.dec1_4(torch.cat([y_enc1_4, y_dec1_4], 1))
+        y_dec1_3 = self.up(y_dec1_4)
+        y_dec1_3 = self.dec1_3(torch.cat([y_enc1_3, y_dec1_3], 1))
+        y_dec1_2 = self.up(y_dec1_3)
+        y_dec1_2 = self.dec1_2(torch.cat([y_enc1_2, y_dec1_2], 1))
+        y_dec1_1 = self.up(y_dec1_2)
+        y_dec1_1 = self.dec1_1(torch.cat([y_enc1_1, y_dec1_1], 1))
+        y_dec1_0 = self.up(y_dec1_1)
+
+        # output of 1st unet
+        output1 = self.output1(y_dec1_0)
+
+        # multiply input and output of 1st unet
+        mul_output1 = _input * output1
+
+        # encoder of 2nd unet
+        y_enc2_1 = self.enc2_1(mul_output1)
+        y_enc2_2 = self.enc2_2(y_enc2_1)
+        y_enc2_3 = self.enc2_3(y_enc2_2)
+        y_enc2_4 = self.enc2_4(y_enc2_3)
+        y_enc2_5 = self.enc2_5(y_enc2_4)
+        y_enc2_6 = self.enc2_6(y_enc2_5)
+
+        # aspp bridge 2
+        y_aspp2 = self.aspp2(y_enc2_6)
+
+        # decoder of 2nd unet
+        y_dec2_5 = self.up(y_aspp2)
+        y_dec2_5 = self.dec2_5(torch.cat([y_enc1_5, y_enc2_5, y_dec2_5], 1))
+        y_dec2_4 = self.up(y_dec2_5)
+        y_dec2_4 = self.dec2_4(torch.cat([y_enc1_4, y_enc2_4, y_dec2_4], 1))
+        y_dec2_3 = self.up(y_dec2_4)
+        y_dec2_3 = self.dec2_3(torch.cat([y_enc1_3, y_enc2_3, y_dec2_3], 1))
+        y_dec2_2 = self.up(y_dec2_3)
+        y_dec2_2 = self.dec2_2(torch.cat([y_enc1_2, y_enc2_2, y_dec2_2], 1))
+        y_dec2_1 = self.up(y_dec2_2)
+        y_dec2_1 = self.dec2_1(torch.cat([y_enc1_1, y_enc2_1, y_dec2_1], 1))
+        y_dec2_0 = self.up(y_dec2_1)
+
+        # output of 2nd unet
+        output2 = self.output2(y_dec2_0)
+
+        return output1, output2
