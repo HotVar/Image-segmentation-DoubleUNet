@@ -122,16 +122,14 @@ def output_block():
     return Layer
 
 
-
 class DoubleUNet(nn.Module):
-    def __init__(self, PATH_VGG19):
+    def __init__(self):
         super().__init__()
         self.enc1_1 = VGGBlock(3, 64, 64, True)
         self.enc1_2 = VGGBlock(64, 128, 128, True)
         self.enc1_3 = VGGBlock(128, 256, 256, True)
         self.enc1_4 = VGGBlock(256, 512, 512, True)
         self.enc1_5 = VGGBlock(512, 512, 512, True)
-        self.enc1_6 = VGGBlock(512, 512, 512, True)
 
         # apply pretrained vgg19 weights on 1st unet
         vgg19 = models.vgg19_bn()
@@ -157,17 +155,11 @@ class DoubleUNet(nn.Module):
         self.enc1_5.bn1.weights = vgg19.features[34].weight
         self.enc1_5.conv2.weights = vgg19.features[36].weight
         self.enc1_5.bn2.weights = vgg19.features[37].weight
-        self.enc1_6.conv1.weights = vgg19.features[40].weight
-        self.enc1_6.bn1.weights = vgg19.features[41].weight
-        self.enc1_6.conv2.weights = vgg19.features[43].weight
-        self.enc1_6.bn2.weights = vgg19.features[44].weight
         del vgg19
 
         self.aspp1 = ASPP(512, 512)
 
         self.up = nn.Upsample(scale_factor=2, mode='bilinear')
-        self.dec1_6 = VGGBlock(1024, 512, 512, False)
-        self.dec1_5 = VGGBlock(1024, 512, 512, False)
         self.dec1_4 = VGGBlock(1024, 256, 256, False)
         self.dec1_3 = VGGBlock(512, 128, 128, False)
         self.dec1_2 = VGGBlock(256, 64, 64, False)
@@ -180,12 +172,9 @@ class DoubleUNet(nn.Module):
         self.enc2_3 = VGGBlock(128, 256, 256, True, True)
         self.enc2_4 = VGGBlock(256, 512, 512, True, True)
         self.enc2_5 = VGGBlock(512, 512, 512, True, True)
-        self.enc2_6 = VGGBlock(512, 512, 512, True, True)
 
         self.aspp2 = ASPP(512, 512)
 
-        self.dec2_6 = VGGBlock(1536, 512, 512, False, True)
-        self.dec2_5 = VGGBlock(1536, 512, 512, False, True)
         self.dec2_4 = VGGBlock(1536, 256, 256, False, True)
         self.dec2_3 = VGGBlock(768, 128, 128, False, True)
         self.dec2_2 = VGGBlock(384, 64, 64, False, True)
@@ -200,15 +189,12 @@ class DoubleUNet(nn.Module):
         y_enc1_3 = self.enc1_3(y_enc1_2)
         y_enc1_4 = self.enc1_4(y_enc1_3)
         y_enc1_5 = self.enc1_5(y_enc1_4)
-        y_enc1_6 = self.enc1_6(y_enc1_5)
 
         # aspp bridge1
-        y_aspp1 = self.aspp1(y_enc1_6)
+        y_aspp1 = self.aspp1(y_enc1_5)
 
         # decoder of 1st unet
-        y_dec1_5 = self.up(y_aspp1)
-        y_dec1_5 = self.dec1_5(torch.cat([y_enc1_5, y_dec1_5], 1))
-        y_dec1_4 = self.up(y_dec1_5)
+        y_dec1_4 = self.up(y_aspp1)
         y_dec1_4 = self.dec1_4(torch.cat([y_enc1_4, y_dec1_4], 1))
         y_dec1_3 = self.up(y_dec1_4)
         y_dec1_3 = self.dec1_3(torch.cat([y_enc1_3, y_dec1_3], 1))
@@ -230,15 +216,12 @@ class DoubleUNet(nn.Module):
         y_enc2_3 = self.enc2_3(y_enc2_2)
         y_enc2_4 = self.enc2_4(y_enc2_3)
         y_enc2_5 = self.enc2_5(y_enc2_4)
-        y_enc2_6 = self.enc2_6(y_enc2_5)
 
         # aspp bridge 2
-        y_aspp2 = self.aspp2(y_enc2_6)
+        y_aspp2 = self.aspp2(y_enc2_5)
 
         # decoder of 2nd unet
-        y_dec2_5 = self.up(y_aspp2)
-        y_dec2_5 = self.dec2_5(torch.cat([y_enc1_5, y_enc2_5, y_dec2_5], 1))
-        y_dec2_4 = self.up(y_dec2_5)
+        y_dec2_4 = self.up(y_aspp2)
         y_dec2_4 = self.dec2_4(torch.cat([y_enc1_4, y_enc2_4, y_dec2_4], 1))
         y_dec2_3 = self.up(y_dec2_4)
         y_dec2_3 = self.dec2_3(torch.cat([y_enc1_3, y_enc2_3, y_dec2_3], 1))
